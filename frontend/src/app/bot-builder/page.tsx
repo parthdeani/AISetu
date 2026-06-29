@@ -11,15 +11,28 @@ const availableNodes = [
   { type: 'aiResponse', title: 'AI Assistant', desc: 'GPT/Claude smart response', icon: '🤖', color: 'border-cyan-500' },
 ];
 
-const initialNodes = [
+interface FlowNode {
+  id: string;
+  type: string;
+  title: string;
+  desc: string;
+  x: number;
+  y: number;
+  data?: {
+    message?: string;
+    threshold?: number;
+  };
+}
+
+const initialNodes: FlowNode[] = [
   { id: '1', type: 'trigger', title: 'Webhook Trigger', desc: 'Triggers on incoming message', x: 50, y: 150, data: {} },
   { id: '2', type: 'sendMessage', title: 'Welcome Message', desc: 'Please send product image', x: 280, y: 150, data: { message: 'Hello! Please send a product image to search in our catalog.' } },
   { id: '3', type: 'imageSearch', title: 'Visual Image Search', desc: 'Query vector db index', x: 520, y: 150, data: { threshold: 0.70 } },
 ];
 
 export default function BotBuilder() {
-  const [nodes, setNodes] = useState(initialNodes);
-  const [selectedNode, setSelectedNode] = useState<any>(initialNodes[0]);
+  const [nodes, setNodes] = useState<FlowNode[]>(initialNodes);
+  const [selectedNode, setSelectedNode] = useState<FlowNode | null>(initialNodes[0]);
   const [flowName, setFlowName] = useState('Default WhatsApp Search Flow');
   const [isSaving, setIsSaving] = useState(false);
 
