@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
+import { getApiUrl } from '../api-config';
 
 export default function Sandbox() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -143,8 +144,7 @@ export default function Sandbox() {
       const formData = new FormData();
       formData.append('image', processedBlob, 'sandbox_processed.png');
 
-      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const response = await fetch(`http://${host}:4000/api/live-test/search?threshold=${threshold}`, {
+      const response = await fetch(getApiUrl(`/api/live-test/search?threshold=${threshold}`), {
         method: 'POST',
         body: formData,
       });

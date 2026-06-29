@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { getApiUrl } from './api-config';
 import {
   BarChart,
   Bar,
@@ -23,7 +24,7 @@ export default function Dashboard() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('http://localhost:4000/api/workspace/dashboard-metrics')
+    fetch(getApiUrl('/api/workspace/dashboard-metrics'))
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load metrics');
         return res.json();

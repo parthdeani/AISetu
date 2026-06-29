@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { getApiUrl } from '../api-config';
 
 export default function History() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -9,7 +10,7 @@ export default function History() {
 
   const fetchLogs = (phone = '') => {
     setLoading(true);
-    const url = `http://localhost:4000/api/workspace/search-history?phone=${encodeURIComponent(phone)}`;
+    const url = getApiUrl(`/api/workspace/search-history?phone=${encodeURIComponent(phone)}`);
     fetch(url)
       .then((res) => res.json())
       .then((data) => {

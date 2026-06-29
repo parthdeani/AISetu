@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-
-const getApiHost = () => (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
+import { getApiUrl } from '../api-config';
 
 export default function Catalog() {
   const [products, setProducts] = useState<any[]>([]);
@@ -30,7 +29,7 @@ export default function Catalog() {
   const handleSyncLocal = () => {
     setIsSyncing(true);
     setSyncStatus('Scanning uploads folder and generating 15-degree rotation embeddings...');
-    fetch(`http://${getApiHost()}:4000/api/catalog/sync-local`, {
+    fetch(getApiUrl('/api/catalog/sync-local'), {
       method: 'POST',
     })
       .then((res) => res.json())
@@ -57,7 +56,7 @@ export default function Catalog() {
 
   const fetchProducts = (pageNum = page) => {
     setLoading(true);
-    fetch(`http://${getApiHost()}:4000/api/catalog?page=${pageNum}&limit=${limit}`)
+    fetch(getApiUrl(`/api/catalog?page=${pageNum}&limit=${limit}`))
       .then((res) => res.json())
       .then((data) => {
         setProducts(data.items || []);
@@ -76,7 +75,7 @@ export default function Catalog() {
     e.preventDefault();
     if (!newProduct.code || !newProduct.name) return;
 
-    fetch(`http://${getApiHost()}:4000/api/catalog`, {
+    fetch(getApiUrl('/api/catalog'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -99,7 +98,7 @@ export default function Catalog() {
   };
 
   const handleDeleteProduct = (id: string) => {
-    fetch(`http://${getApiHost()}:4000/api/catalog/${id}`, {
+    fetch(getApiUrl(`/api/catalog/${id}`), {
       method: 'DELETE',
     })
       .then((res) => res.json())
@@ -118,7 +117,7 @@ export default function Catalog() {
     if (zipFile) formData.append('zip', zipFile);
 
     try {
-      const response = await fetch(`http://${getApiHost()}:4000/api/catalog/bulk-upload`, {
+      const response = await fetch(getApiUrl('/api/catalog/bulk-upload'), {
         method: 'POST',
         body: formData,
       });
@@ -175,7 +174,7 @@ export default function Catalog() {
     if (!selectedProduct) return;
     setIsSaving(true);
 
-    fetch(`http://${getApiHost()}:4000/api/catalog/${selectedProduct.id}`, {
+    fetch(getApiUrl(`/api/catalog/${selectedProduct.id}`), {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
