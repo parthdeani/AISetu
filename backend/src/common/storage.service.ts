@@ -1,89 +1,67 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import * as AWS from 'aws-sdk';
+import { v2 as cloudinary } from 'cloudinary';
 import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
 export class StorageService implements OnModuleInit {
-  private s3: AWS.S3;
-  private bucket: string;
   private readonly logger = new Logger(StorageService.name);
-  private isS3Offline = false;
-  private localUploadsDir = path.join(process.cwd(), 'uploads');
+  private isCloudinaryConfigured = false;
 
   onModuleInit() {
-    this.bucket = process.env.S3_BUCKET || 'vwc-media';
-    const endpoint = process.env.S3_ENDPOINT || 'http://localhost:9000';
-    const accessKeyId = process.env.S3_ACCESS_KEY || 'minio_admin';
-    const secretAccessKey = process.env.S3_SECRET_KEY || 'minio_password';
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'dr3vva4uq';
+    const apiKey = process.env.CLOUDINARY_API_KEY || '745293373178977';
+    const apiSecret = process.env.CLOUDINARY_API_SECRET || 'U4nZMfJkCj1aF8pCvfHEuYGVr3I';
 
-    // Ensure local uploads directory exists for fallback
-    if (!fs.existsSync(this.localUploadsDir)) {
-      fs.mkdirSync(this.localUploadsDir, { recursive: true });
+    if (cloudName && apiKey && apiSecret) {
+      cloudinary.config({
+        cloud_name: cloudName,
+        api_key: apiKey,
+        api_secret: apiSecret,
+      });
+      this.isCloudinaryConfigured = true;
+      this.logger.log(`🚀 Connected to Cloudinary storage for cloud: ${cloudName}`);
+    } else {
+      this.logger.warn('⚠️ Cloudinary credentials missing. Falling back to local filesystem.');
     }
-
-    this.s3 = new AWS.S3({
-      endpoint,
-      accessKeyId,
-      secretAccessKey,
-      s3ForcePathStyle: true,
-      signatureVersion: 'v4',
-    });
-
-    this.s3.createBucket({ Bucket: this.bucket }, (err) => {
-      if (err) {
-        this.isS3Offline = true;
-        this.logger.warn(`⚠️ S3 Storage is offline. Falling back to local filesystem storage at backend/uploads/. Details: ${err.message}`);
-      } else {
-        this.logger.log(`Connected to S3 bucket: ${this.bucket}`);
-      }
-    });
   }
 
   async uploadFile(fileBuffer: Buffer, fileName: string, contentType: string): Promise<string> {
+    if (this.isCloudinaryConfigured) {
+      return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'vwc_products',
+            resource_type: 'auto',
+          },
+          (error, result) => {
+            if (error) {
+              this.logger.error(`Cloudinary upload failed: ${error.message}`);
+              return reject(error);
+            }
+            if (result) {
+              this.logger.log(`Uploaded to Cloudinary CDN: ${result.secure_url}`);
+              resolve(result.secure_url);
+            }
+          },
+        );
+        uploadStream.end(fileBuffer);
+      });
+    }
+
+    // Fallback to local uploads directory if Cloudinary is not configured
+    const localUploadsDir = path.join(process.cwd(), 'uploads');
+    if (!fs.existsSync(localUploadsDir)) {
+      fs.mkdirSync(localUploadsDir, { recursive: true });
+    }
     const uniqueFileName = `${Date.now()}_${fileName}`;
-
-    if (this.isS3Offline) {
-      this.logger.log(`Writing file locally to backend/uploads/${uniqueFileName}...`);
-      const filePath = path.join(this.localUploadsDir, uniqueFileName);
-      await fs.promises.writeFile(filePath, fileBuffer);
-      
-      const serverPort = process.env.PORT || 4000;
-      return `http://localhost:${serverPort}/api/uploads/${uniqueFileName}`;
-    }
-
-    try {
-      const key = `uploads/${uniqueFileName}`;
-      await this.s3
-        .putObject({
-          Bucket: this.bucket,
-          Key: key,
-          Body: fileBuffer,
-          ContentType: contentType,
-        })
-        .promise();
-
-      const endpointUrl = process.env.S3_PUBLIC_DOMAIN || process.env.S3_ENDPOINT || 'http://localhost:9000';
-      return `${endpointUrl}/${this.bucket}/${key}`;
-    } catch (err) {
-      this.logger.warn(`S3 Upload failed, falling back to local filesystem: ${err.message}`);
-      this.isS3Offline = true;
-      return this.uploadFile(fileBuffer, fileName, contentType);
-    }
+    const filePath = path.join(localUploadsDir, uniqueFileName);
+    await fs.promises.writeFile(filePath, fileBuffer);
+    const serverPort = process.env.PORT || 4000;
+    return `http://localhost:${serverPort}/api/uploads/${uniqueFileName}`;
   }
 
   async getSignedUrl(key: string): Promise<string> {
-    if (this.isS3Offline) {
-      return key; // Just return direct local HTTP path
-    }
-    try {
-      return this.s3.getSignedUrlPromise('getObject', {
-        Bucket: this.bucket,
-        Key: key,
-        Expires: 3600,
-      });
-    } catch {
-      return key;
-    }
+    return key;
   }
 }
