@@ -49,13 +49,14 @@ export class SearchService implements OnModuleInit {
       this.logger.warn(`⚠️ Qdrant is offline. Falling back to local MongoDB Cosine Similarity search. details: ${err.message}`);
     }
 
-    // Pre-load local CLIP model weights on startup
+    // Pre-load lightweight CLIP model weights for high-speed cloud execution
     try {
-      this.logger.log('Downloading/loading local CLIP model (Xenova/clip-vit-large-patch14)...');
+      const modelName = process.env.CLIP_MODEL || 'Xenova/clip-vit-base-patch32';
+      this.logger.log(`Downloading/loading CLIP model (${modelName})...`);
       const { AutoProcessor, CLIPVisionModelWithProjection } = require('@xenova/transformers');
-      this.clipProcessor = await AutoProcessor.from_pretrained('Xenova/clip-vit-large-patch14');
-      this.clipModel = await CLIPVisionModelWithProjection.from_pretrained('Xenova/clip-vit-large-patch14');
-      this.logger.log('🚀 Local CLIP model loaded successfully!');
+      this.clipProcessor = await AutoProcessor.from_pretrained(modelName);
+      this.clipModel = await CLIPVisionModelWithProjection.from_pretrained(modelName);
+      this.logger.log('🚀 CLIP model loaded successfully!');
     } catch (err) {
       this.logger.error(`Failed to load CLIP model. Falling back to mock: ${err.message}`);
     }
@@ -380,7 +381,7 @@ export class SearchService implements OnModuleInit {
       const bestMatches: Record<string, { imageId: string; productId: string; score: number; payload: any }> = {};
 
       for (const img of images) {
-        if (img.vector && img.vector.length === 768) {
+        if (img.vector && img.vector.length === vector.length) {
           const score = this.cosineSimilarity(vector, img.vector);
           const currentBest = bestMatches[img.productId];
           if (!currentBest || score > currentBest.score) {
