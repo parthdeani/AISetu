@@ -1,23 +1,6 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: vwc-postgres
-    environment:
-      POSTGRES_DB: vwc_db
-      POSTGRES_USER: vwc_user
-      POSTGRES_PASSWORD: vwc_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vwc_user -d vwc_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   redis:
     image: redis:7-alpine
     container_name: vwc-redis
@@ -73,11 +56,8 @@ services:
     environment:
       - PORT=4000
       - NODE_ENV=production
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=vwc_user
-      - DB_PASSWORD=vwc_password
-      - DB_NAME=vwc_db
+      - MONGODB_URI=${MONGODB_URI}
+      - HF_TOKEN=${HF_TOKEN}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - QDRANT_URL=http://qdrant:6333
@@ -88,8 +68,6 @@ services:
       - JWT_SECRET=super_secret_jwt_key_for_production_12345
       - WHATSAPP_VERIFY_TOKEN=vwc_verify_token_secure
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       qdrant:
@@ -110,7 +88,6 @@ services:
       - backend
 
 volumes:
-  postgres_data:
   redis_data:
   qdrant_data:
   minio_data:

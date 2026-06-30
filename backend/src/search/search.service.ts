@@ -51,12 +51,16 @@ export class SearchService implements OnModuleInit {
 
     // Pre-load exact CLIP model weights for 94.5%+ accuracy visual search matching
     try {
-      const modelName = process.env.CLIP_MODEL || 'Xenova/clip-vit-large-patch14';
-      this.logger.log(`Downloading/loading CLIP model (${modelName})...`);
-      const { AutoProcessor, CLIPVisionModelWithProjection } = require('@xenova/transformers');
-      this.clipProcessor = await AutoProcessor.from_pretrained(modelName);
-      this.clipModel = await CLIPVisionModelWithProjection.from_pretrained(modelName);
-      this.logger.log('🚀 CLIP model loaded successfully!');
+      if (process.env.HF_TOKEN) {
+        this.logger.log('🚀 Using Hugging Face Inference API for CLIP embeddings (Production mode)');
+      } else {
+        const modelName = process.env.CLIP_MODEL || 'Xenova/clip-vit-large-patch14';
+        this.logger.log(`Downloading/loading CLIP model (${modelName})...`);
+        const { AutoProcessor, CLIPVisionModelWithProjection } = require('@xenova/transformers');
+        this.clipProcessor = await AutoProcessor.from_pretrained(modelName);
+        this.clipModel = await CLIPVisionModelWithProjection.from_pretrained(modelName);
+        this.logger.log('🚀 CLIP model loaded successfully!');
+      }
     } catch (err) {
       this.logger.error(`Failed to load CLIP model. Falling back to mock: ${err.message}`);
     }
@@ -84,9 +88,72 @@ export class SearchService implements OnModuleInit {
     }
   }
 
-  // Generates real visual embeddings using OpenAI CLIP model running locally!
+  // Generates real visual embeddings using OpenAI CLIP model running locally or via Hugging Face API!
   async generateEmbeddingFromJimp(image: any, shouldCrop = false): Promise<number[]> {
     try {
+      if (process.env.HF_TOKEN) {
+        const axios = require('axios');
+        let targetImg = image;
+        if (targetImg.width > 224 || targetImg.height > 224) {
+          targetImg = targetImg.clone();
+          targetImg.resize({ w: 224, h: 224 });
+        }
+        const fullBuffer = await targetImg.getBuffer('image/png');
+
+        const croppedImg = targetImg.clone();
+        const W = croppedImg.width;
+        const H = croppedImg.height;
+        const startY = Math.round(H * 0.25);
+        const endY = Math.round(H * 0.70);
+        const startX = Math.round(W * 0.10);
+        const endX = Math.round(W * 0.90);
+        const cropW = endX - startX;
+        const cropH = endY - startY;
+        croppedImg.crop({ x: startX, y: startY, w: cropW, h: cropH });
+        const cropBuffer = await croppedImg.getBuffer('image/png');
+
+        const modelName = process.env.CLIP_MODEL || 'openai/clip-vit-large-patch14';
+        const hfModel = modelName.startsWith('Xenova/') 
+          ? modelName.replace('Xenova/', 'openai/') 
+          : modelName;
+
+        const getHfEmbedding = async (imgBuffer: Buffer): Promise<number[]> => {
+          const response = await axios.post(
+            `https://api-inference.huggingface.co/pipeline/feature-extraction/${hfModel}`,
+            imgBuffer,
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.HF_TOKEN}`,
+                'Content-Type': 'image/png',
+              },
+            }
+          );
+          let data = response.data;
+          if (Array.isArray(data[0])) {
+            data = data[0];
+          }
+          return data as number[];
+        };
+
+        const [fullVector, cropVector] = await Promise.all([
+          getHfEmbedding(fullBuffer),
+          getHfEmbedding(cropBuffer),
+        ]);
+
+        const blendedVector: number[] = new Array(fullVector.length);
+        let sumSq = 0;
+        for (let i = 0; i < fullVector.length; i++) {
+          const val = 0.5 * fullVector[i] + 0.5 * cropVector[i];
+          blendedVector[i] = val;
+          sumSq += val * val;
+        }
+        const norm = Math.sqrt(sumSq) || 1;
+        for (let i = 0; i < blendedVector.length; i++) {
+          blendedVector[i] /= norm;
+        }
+        return blendedVector;
+      }
+
       if (this.clipProcessor && this.clipModel) {
         const { RawImage } = require('@xenova/transformers');
         
